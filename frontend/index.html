@@ -1,0 +1,1218 @@
+<meta charset="utf-8" />
+<!-- Nessuna origine esterna e' raggiungibile: la politica lo impone al
+     motore, non solo alle nostre intenzioni. Se un giorno qualcuno
+     aggiungesse per sbaglio un <script src="https://..."> o un font da
+     CDN, verrebbe bloccato invece di funzionare in silenzio.
+     'unsafe-inline' serve allo script principale in questa pagina e agli
+     stili che Editor.js inietta a runtime; connect-src 'none' vieta
+     comunque fetch, XHR e WebSocket verso chiunque, loopback compreso. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none';
+               script-src 'self' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data:;
+               font-src 'self';
+               connect-src 'none';
+               form-action 'none';
+               frame-src 'none';
+               object-src 'none';
+               base-uri 'none'" />
+<title>Ledger</title>
+<link rel="stylesheet" href="style.css" />
+
+<!-- Il marchio: la L e' la riga di totale di un registro. Il tratto
+     verticale e' il bordo colonna, il piede e' la riga che si tira prima
+     della somma, le due tacche sono le voci registrate sopra. -->
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo-mark" viewBox="0 0 32 32">
+      <defs>
+        <linearGradient id="logo-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#1E7E4C" />
+          <stop offset="1" stop-color="#115B3A" />
+        </linearGradient>
+      </defs>
+      <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
+      <path d="M15.8 12.6H20.5M15.8 17.2H20.5" stroke="#fff" stroke-opacity=".32"
+            stroke-width="1.6" stroke-linecap="round" />
+      <path d="M11 8V23H24" stroke="#fff" stroke-width="2.9"
+            stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+
+    <symbol id="icon-trash" viewBox="0 0 16 16">
+      <path d="M3 4.5h10M6.5 4.5V3.2h3v1.3M4.4 4.5l.6 8.3h6l.6-8.3M6.6 7v3.4M9.4 7v3.4"
+            stroke="currentColor" stroke-width="1.3" stroke-linecap="round"
+            stroke-linejoin="round" fill="none" />
+    </symbol>
+  </defs>
+</svg>
+
+<div id="wave-halo" class="wave"></div>
+<div id="wave-core" class="wave"></div>
+
+<div id="unlock-screen">
+  <div class="unlock-box">
+    <svg class="unlock-mark" viewBox="0 0 32 32"><use href="#logo-mark" /></svg>
+    <h2 id="unlock-title">Sblocca Ledger</h2>
+    <p class="unlock-sub" id="unlock-sub">Le tue note restano su questo computer, cifrate.</p>
+    <!-- autocomplete/spellcheck spenti: la passphrase non deve finire nel
+         gestore password del motore ne' passare da un correttore. -->
+    <input id="passphrase-input" type="password" placeholder="Passphrase"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+    <input id="passphrase-confirm" type="password" placeholder="Ripeti la passphrase" style="display: none"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+    <div class="unlock-error" id="unlock-error"></div>
+    <button id="unlock-btn" class="btn-primary">Sblocca</button>
+    <p class="unlock-warn" id="unlock-warn" style="display: none">
+      Non esiste un recupero. Se dimentichi questa passphrase, le note non
+      sono piu' leggibili da nessuno, te compreso.
+    </p>
+  </div>
+</div>
+
+<div id="app" style="display: none">
+  <aside id="sidebar">
+    <div class="sidebar-brand">
+      <svg class="brand-mark" viewBox="0 0 32 32"><use href="#logo-mark" /></svg>
+      <span class="brand-name">Ledger</span>
+    </div>
+
+    <div class="sidebar-search">
+      <input id="search-input" type="text" placeholder="Cerca" />
+    </div>
+    <div id="search-results" class="search-results" style="display: none"></div>
+
+    <nav class="sidebar-scroll">
+      <!-- Luoghi: destinazioni fisse, contano quanto ti aspetta -->
+      <section class="nav-group">
+        <p class="nav-eyebrow"><span>Oggi</span></p>
+        <button id="journal-today-btn" class="nav-item">
+          <span class="nav-label">Journal</span>
+          <span class="nav-count" id="streak-badge"></span>
+        </button>
+        <button id="inbox-btn" class="nav-item">
+          <span class="nav-label">Inbox</span>
+          <span class="nav-count" id="inbox-badge"></span>
+        </button>
+        <button id="booster-btn" class="nav-item">
+          <span class="nav-label">Da ripassare</span>
+          <span class="nav-count" id="booster-badge"></span>
+        </button>
+      </section>
+
+      <!-- Cose: quello che crei tu, ogni riga si puo' eliminare -->
+      <section class="nav-group">
+        <p class="nav-eyebrow"><span>Pagine</span><span class="eyebrow-count" id="pages-count"></span></p>
+        <div id="pages-list" class="nav-list"></div>
+        <button id="new-page-btn" class="nav-item nav-add">
+          <span class="nav-label">Nuova pagina</span>
+        </button>
+        <button id="new-planning-btn" class="nav-item nav-add">
+          <span class="nav-label">Piano di sviluppo</span>
+        </button>
+      </section>
+
+      <section class="nav-group">
+        <p class="nav-eyebrow"><span>Database</span><span class="eyebrow-count" id="dbs-count"></span></p>
+        <div id="dbs-list" class="nav-list"></div>
+        <button id="new-database-btn" class="nav-item nav-add">
+          <span class="nav-label">Nuovo database</span>
+        </button>
+      </section>
+
+      <section class="nav-group">
+        <p class="nav-eyebrow"><span>Progetti</span><span class="eyebrow-count" id="projects-count"></span></p>
+        <div id="projects-list" class="nav-list"></div>
+        <button id="new-project-btn" class="nav-item nav-add">
+          <span class="nav-label">Nuovo progetto</span>
+        </button>
+      </section>
+
+      <section class="nav-group">
+        <p class="nav-eyebrow"><span>Rivedere</span></p>
+        <button id="review-btn" class="nav-item">
+          <span class="nav-label">Punto della settimana</span>
+        </button>
+        <button id="reflection-weekly-btn" class="nav-item">
+          <span class="nav-label">Riflessione settimanale</span>
+        </button>
+        <button id="reflection-monthly-btn" class="nav-item">
+          <span class="nav-label">Riflessione mensile</span>
+        </button>
+      </section>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button id="backup-btn" class="nav-item">
+        <span class="nav-label">Backup</span>
+      </button>
+      <p class="foot-meta mono" id="backup-meta"></p>
+    </div>
+  </aside>
+  <main id="main">
+    <div id="empty-state">
+      <header class="view-head">
+        <p class="view-eyebrow">Ledger</p>
+        <h2 class="view-title">Inizia da qui</h2>
+        <p class="view-sub">
+          Crea una pagina, apri il journal di oggi, o cerca qualcosa che hai gia' scritto.
+          Premi <span class="kbd">Ctrl</span> <span class="kbd">Shift</span> <span class="kbd">Spazio</span>
+          da qualsiasi app per catturare un pensiero al volo.
+        </p>
+      </header>
+      <div class="empty-actions">
+        <button id="empty-new-page-btn" class="btn-primary">Nuova pagina</button>
+        <button id="empty-journal-btn" class="btn-secondary">Journal di oggi</button>
+      </div>
+    </div>
+
+    <div id="page-view" class="canvas" style="display: none">
+      <div id="back-to-project" style="display: none">
+        <button id="back-to-project-btn" class="btn-quiet">&larr; Torna al progetto</button>
+      </div>
+      <div class="page-bar">
+        <input id="page-title-input" placeholder="Senza titolo" />
+        <button id="export-md-btn" class="btn-quiet">Esporta .md</button>
+      </div>
+      <div id="journal-meta" style="display: none">
+        <p id="journal-prompt"></p>
+        <div class="journal-fields">
+          <label class="journal-field">
+            <span>Mood</span>
+            <select id="journal-mood">
+              <option value="">—</option>
+              <option value="Ottimo">Ottimo</option>
+              <option value="Buono">Buono</option>
+              <option value="Neutro">Neutro</option>
+              <option value="Difficile">Difficile</option>
+              <option value="Pessimo">Pessimo</option>
+            </select>
+          </label>
+          <label class="journal-field">
+            <span>Gratitudine</span>
+            <input id="journal-gratitudine" placeholder="Separa con virgole" />
+          </label>
+        </div>
+      </div>
+      <div id="editor-container"></div>
+      <div id="backlinks-section">
+        <h3>Menzionato in</h3>
+        <div id="backlinks-list"></div>
+      </div>
+    </div>
+
+    <div id="database-view" class="canvas" style="display: none">
+      <div class="db-bar">
+        <input id="db-title-input" placeholder="Senza titolo" />
+      </div>
+      <div id="schema-editor">
+        <p class="nav-eyebrow" style="padding: 0 0 8px">Campi</p>
+        <div id="schema-fields"></div>
+        <div class="schema-actions">
+          <button id="add-field-btn" class="btn-quiet">Aggiungi campo</button>
+          <button id="save-schema-btn" class="btn-primary">Salva schema</button>
+        </div>
+      </div>
+      <div id="db-content" style="display: none">
+        <div class="view-switcher">
+          <button data-view="table" class="active">Tabella</button>
+          <button data-view="board">Board</button>
+          <button data-view="list">Lista</button>
+        </div>
+        <div id="db-view-container"></div>
+      </div>
+    </div>
+
+    <div id="project-view" class="canvas" style="display: none">
+      <header class="view-head">
+        <p class="view-eyebrow">Progetto</p>
+        <div class="project-headline">
+          <input id="project-title-input" placeholder="Senza nome" />
+          <div id="project-pills" class="project-pills"></div>
+        </div>
+      </header>
+      <p class="section-label">Scheda</p>
+      <div id="project-fields"></div>
+      <p class="section-label">Pagine del progetto</p>
+      <div class="project-pages">
+        <button class="page-card" data-page="architettura">
+          <span class="page-card-title">Architettura</span>
+          <span class="page-card-sub">Com'e' fatto, e i diagrammi</span>
+        </button>
+        <button class="page-card" data-page="decisioni">
+          <span class="page-card-title">Decisioni</span>
+          <span class="page-card-sub">Perche' e' fatto cosi'</span>
+        </button>
+        <button class="page-card" data-page="vincoli">
+          <span class="page-card-title">Vincoli</span>
+          <span class="page-card-sub">Cosa non si tocca</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="booster-view" class="canvas" style="display: none">
+      <header class="view-head">
+        <p class="view-eyebrow">Studio</p>
+        <h2 class="view-title">Da ripassare</h2>
+        <p class="view-sub">
+          Valuta quanto ricordi: 1 se non ti veniva, 5 se e' stato immediato.
+          Ledger decide da solo quando riproportelo.
+        </p>
+      </header>
+      <div class="booster-add">
+        <input id="new-concept-input" placeholder="Cosa vuoi ricordare?" />
+        <button id="add-concept-btn" class="btn-primary">Aggiungi</button>
+      </div>
+      <p class="section-label">In scadenza oggi</p>
+      <div id="booster-list"></div>
+    </div>
+
+    <div id="inbox-view" class="canvas" style="display: none">
+      <header class="view-head">
+        <p class="view-eyebrow">Inbox</p>
+        <h2 class="view-title">Da triagare</h2>
+        <p class="view-sub">
+          Quello che hai catturato con
+          <span class="kbd">Ctrl</span> <span class="kbd">Shift</span> <span class="kbd">Spazio</span>.
+          Trasformalo in pagina o eliminalo.
+        </p>
+      </header>
+      <div id="inbox-list"></div>
+    </div>
+
+    <div id="review-view" class="canvas" style="display: none">
+      <header class="view-head">
+        <p class="view-eyebrow">Riflessione</p>
+        <h2 class="view-title">Il punto della settimana</h2>
+        <p class="view-sub">Cosa e' rimasto indietro e cosa hai toccato negli ultimi sette giorni.</p>
+      </header>
+      <p class="section-label">Scaduti</p>
+      <div id="review-overdue"></div>
+      <p class="section-label">Da ripassare</p>
+      <div id="review-concepts"></div>
+      <p class="section-label">Pagine modificate</p>
+      <div id="review-pages"></div>
+    </div>
+  </main>
+</div>
+
+<script src="views/table_view.js"></script>
+<script src="views/board_view.js"></script>
+<script src="views/list_view.js"></script>
+<script src="views/graph_view.js"></script>
+<script src="mermaid_view.bundle.js"></script>
+<script src="editor.bundle.js"></script>
+<script>
+  const FIELD_TYPES = ["text", "select", "number", "date", "checkbox"];
+
+  let currentBlock = null;
+  let currentDbViewMode = "table";
+
+  function api() {
+    return window.pywebview.api;
+  }
+
+  // --- onda del cursore ---
+  // Due strati smeraldo che inseguono il puntatore con ritardi diversi.
+  // Il ritardo viene dalla transition CSS, non da un loop di animazione.
+
+  (function initWave() {
+    const hotSelector =
+      "button, a, input, select, textarea, .nav-item, .row-link, .search-result-item, .board-card, .list-row";
+
+    document.addEventListener("pointermove", (e) => {
+      document.body.style.setProperty("--wx", e.clientX + "px");
+      document.body.style.setProperty("--wy", e.clientY + "px");
+      document.body.classList.add("wave-on");
+      document.body.classList.toggle(
+        "wave-hot",
+        !!(e.target instanceof Element && e.target.closest(hotSelector))
+      );
+    });
+
+    document.addEventListener("mouseleave", () => document.body.classList.remove("wave-on"));
+    window.addEventListener("blur", () => document.body.classList.remove("wave-on"));
+  })();
+
+  // --- stato attivo della navigazione ---
+
+  // Solo le voci fisse (quelle con id). Le righe di contenuto ricevono
+  // lo stato attivo da fillList, in base al blocco aperto.
+  function setActiveNav(id) {
+    document.querySelectorAll("#sidebar .nav-item[id]").forEach((el) => {
+      el.classList.toggle("active", el.id === id);
+    });
+  }
+
+  function emptyNote(container, text) {
+    const p = document.createElement("p");
+    p.className = "empty-note";
+    p.textContent = text;
+    container.appendChild(p);
+  }
+
+  // Entrata scaglionata: i figli salgono in sequenza. Un solo reflow
+  // forzato per l'intero contenitore, non uno per elemento.
+  function animateIn(container) {
+    const items = Array.from(container.children);
+    items.forEach((el) => el.classList.remove("enter"));
+    void container.offsetWidth;
+    items.forEach((el, i) => {
+      el.style.setProperty("--i", i);
+      el.classList.add("enter");
+    });
+  }
+
+  // Apre una sezione a tutta pagina (non un blocco): inbox, studio, riflessione.
+  async function openSection(viewId, navId, refreshFn) {
+    await flushCurrentEditor();
+    currentBlock = null;
+    await refreshSidebar();
+    hideAllViews();
+    setActiveNav(navId);
+    const view = document.getElementById(viewId);
+    view.style.display = "block";
+    await refreshFn();
+    animateIn(view);
+  }
+
+  // --- unlock ---
+
+  let isFirstRun = false;
+
+  async function initUnlock() {
+    isFirstRun = await api().is_first_run();
+    document.getElementById("unlock-title").textContent = isFirstRun
+      ? "Scegli una passphrase"
+      : "Sblocca Ledger";
+    document.getElementById("unlock-sub").textContent = isFirstRun
+      ? "Cifra le tue note su questo computer. Almeno 8 caratteri."
+      : "Le tue note restano su questo computer, cifrate.";
+    document.getElementById("unlock-btn").textContent = isFirstRun ? "Crea il vault" : "Sblocca";
+    document.getElementById("passphrase-confirm").style.display = isFirstRun ? "block" : "none";
+    document.getElementById("unlock-warn").style.display = isFirstRun ? "block" : "none";
+
+    document.getElementById("unlock-btn").onclick = tryUnlock;
+    ["passphrase-input", "passphrase-confirm"].forEach((id) => {
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") tryUnlock();
+      });
+    });
+  }
+
+  let unlocking = false;
+
+  async function tryUnlock() {
+    // La derivazione della chiave impiega qualche decimo di secondo: senza
+    // questo blocco un doppio invio lancerebbe due aperture in parallelo.
+    if (unlocking) return;
+    const errorEl = document.getElementById("unlock-error");
+    const passphrase = document.getElementById("passphrase-input").value;
+    if (!passphrase) return;
+
+    // Al primo avvio la passphrase si scrive due volte: un refuso qui
+    // renderebbe il vault inaccessibile per sempre, senza accorgersene.
+    if (isFirstRun) {
+      const confirm = document.getElementById("passphrase-confirm").value;
+      if (passphrase !== confirm) {
+        errorEl.textContent = "Le due passphrase non coincidono.";
+        return;
+      }
+    }
+
+    const unlockBtn = document.getElementById("unlock-btn");
+    const btnLabel = unlockBtn.textContent;
+    unlocking = true;
+    unlockBtn.disabled = true;
+    unlockBtn.textContent = isFirstRun ? "Creazione…" : "Sblocco…";
+    errorEl.textContent = "";
+
+    let res;
+    try {
+      res = await api().open_vault(passphrase);
+    } catch (err) {
+      res = { ok: false, error: "Apertura del vault non riuscita." };
+    } finally {
+      unlocking = false;
+      unlockBtn.disabled = false;
+      unlockBtn.textContent = btnLabel;
+    }
+
+    if (!res.ok) {
+      errorEl.textContent = res.error;
+      return;
+    }
+    // Non lasciare la passphrase nel DOM dopo lo sblocco.
+    document.getElementById("passphrase-input").value = "";
+    document.getElementById("passphrase-confirm").value = "";
+    document.getElementById("unlock-screen").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    await refreshSidebar();
+    await api().ensure_today_journal();
+    await refreshBadges();
+    await refreshBackupMeta();
+    startAutosave();
+  }
+
+  // --- salvataggio periodico ---
+  // Il vault viene riscritto cifrato solo se qualcosa e' cambiato: senza
+  // questo, un arresto anomalo perderebbe tutta la sessione, perche' il
+  // database vive in memoria fino alla chiusura della finestra.
+
+  const AUTOSAVE_MS = 60_000;
+  let autosaveTimer = null;
+
+  function startAutosave() {
+    if (autosaveTimer !== null) return;
+    autosaveTimer = setInterval(async () => {
+      try {
+        await window.LedgerEditor.flush();
+        await api().autosave();
+      } catch (err) {
+        // Un salvataggio saltato non deve fermare quelli successivi.
+      }
+    }, AUTOSAVE_MS);
+  }
+
+  // --- sidebar ---
+
+  async function refreshBadges() {
+    const streak = await api().get_streak();
+    document.getElementById("streak-badge").textContent = streak > 0 ? `${streak}gg` : "";
+
+    const inbox = await api().inbox_count();
+    document.getElementById("inbox-badge").textContent = inbox > 0 ? String(inbox) : "";
+
+    const due = await api().due_today_concepts();
+    document.getElementById("booster-badge").textContent = due.length > 0 ? String(due.length) : "";
+  }
+
+  async function refreshBackupMeta() {
+    const info = await api().get_last_backup_info();
+    const el = document.getElementById("backup-meta");
+    if (!info || !info.last_backup) {
+      el.textContent = "Mai eseguito";
+      return;
+    }
+    const d = new Date(info.last_backup);
+    el.textContent = `Ultimo ${d.toLocaleDateString("it-IT")} ${d.toLocaleTimeString("it-IT", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+  }
+
+  // Una riga di contenuto: etichetta cliccabile + cestino che compare
+  // al passaggio. La conferma avviene nella riga stessa, senza finestre
+  // di sistema che bloccherebbero la webview.
+  function navRow(labelText, isActive, onOpen, onDelete) {
+    const row = document.createElement("div");
+    row.className = "nav-row";
+
+    const item = document.createElement("button");
+    item.className = "nav-item" + (isActive ? " active" : "");
+    const label = document.createElement("span");
+    label.className = "nav-label";
+    label.textContent = labelText;
+    item.appendChild(label);
+    item.onclick = onOpen;
+
+    const trash = document.createElement("button");
+    trash.className = "nav-trash";
+    trash.title = `Elimina ${labelText}`;
+    trash.setAttribute("aria-label", `Elimina ${labelText}`);
+    trash.innerHTML = '<svg viewBox="0 0 16 16"><use href="#icon-trash" /></svg>';
+    trash.onclick = () => openConfirm(row, onDelete);
+
+    row.appendChild(item);
+    row.appendChild(trash);
+    return row;
+  }
+
+  function openConfirm(row, onDelete) {
+    if (row.querySelector(".nav-confirm")) return;
+    closeAllConfirms();
+    row.classList.add("is-confirming");
+
+    const box = document.createElement("div");
+    box.className = "nav-confirm";
+
+    const text = document.createElement("span");
+    text.className = "confirm-text";
+    text.textContent = "Eliminare?";
+
+    const yes = document.createElement("button");
+    yes.className = "confirm-yes";
+    yes.textContent = "Elimina";
+    yes.onclick = async () => {
+      // la riga esce prima che la lista si ricostruisca, cosi' si vede
+      // sparire quella giusta
+      row.classList.add("is-leaving");
+      await new Promise((r) => setTimeout(r, 190));
+      await onDelete();
+    };
+
+    const no = document.createElement("button");
+    no.className = "confirm-no";
+    no.textContent = "Annulla";
+    no.onclick = () => {
+      box.remove();
+      row.classList.remove("is-confirming");
+    };
+
+    box.appendChild(text);
+    box.appendChild(yes);
+    box.appendChild(no);
+    row.appendChild(box);
+    no.focus();
+  }
+
+  function closeAllConfirms() {
+    document.querySelectorAll("#sidebar .nav-confirm").forEach((el) => el.remove());
+    document.querySelectorAll("#sidebar .is-confirming").forEach((el) =>
+      el.classList.remove("is-confirming")
+    );
+  }
+
+  async function deleteAndRefresh(blockId) {
+    await api().delete_block_tree(blockId);
+    if (currentBlock && currentBlock.id === blockId) {
+      currentBlock = null;
+      hideAllViews();
+      setActiveNav("");
+      document.getElementById("empty-state").style.display = "block";
+    }
+    await refreshSidebar();
+    await refreshBadges();
+  }
+
+  function fillList(container, blocks, counter, emptyText, labelOf) {
+    container.innerHTML = "";
+    counter.textContent = blocks.length > 0 ? String(blocks.length) : "";
+    if (blocks.length === 0) {
+      const p = document.createElement("p");
+      p.className = "nav-empty";
+      p.textContent = emptyText;
+      container.appendChild(p);
+      return;
+    }
+    for (const block of blocks) {
+      container.appendChild(
+        navRow(
+          labelOf(block),
+          currentBlock && currentBlock.id === block.id,
+          () => selectBlock(block),
+          () => deleteAndRefresh(block.id)
+        )
+      );
+    }
+  }
+
+  async function refreshSidebar() {
+    const roots = await api().query_blocks(null, [
+      { field: "type", op: "in", value: ["page", "database"] },
+    ]);
+    const projectRows = await api().list_projects();
+
+    fillList(
+      document.getElementById("pages-list"),
+      roots.filter((b) => b.type === "page"),
+      document.getElementById("pages-count"),
+      "Nessuna pagina",
+      (b) => (b.content && b.content.title) || "Senza titolo"
+    );
+
+    fillList(
+      document.getElementById("dbs-list"),
+      // il contenitore dei progetti ha una sezione propria, non va qui
+      roots.filter((b) => b.type === "database" && !(b.properties && b.properties.template)),
+      document.getElementById("dbs-count"),
+      "Nessun database",
+      (b) => (b.content && b.content.title) || "Senza titolo"
+    );
+
+    fillList(
+      document.getElementById("projects-list"),
+      projectRows,
+      document.getElementById("projects-count"),
+      "Nessun progetto",
+      (b) => (b.properties && b.properties.Nome) || "Senza nome"
+    );
+  }
+
+  document.getElementById("new-page-btn").onclick = async () => {
+    const id = await api().create_block("page", null, { title: "Senza titolo" });
+    const block = await api().get_block(id);
+    await refreshSidebar();
+    await selectBlock(block);
+  };
+
+  document.getElementById("new-database-btn").onclick = async () => {
+    const id = await api().create_block("database", null, { title: "Nuovo database" });
+    const block = await api().get_block(id);
+    await refreshSidebar();
+    await selectBlock(block);
+  };
+
+  document.getElementById("new-project-btn").onclick = async () => {
+    const row = await api().create_project("Nuovo progetto");
+    await selectBlock(row);
+    document.getElementById("project-title-input").select();
+  };
+
+  document.getElementById("new-planning-btn").onclick = async () => {
+    const page = await api().create_code_planning_page();
+    await refreshSidebar();
+    await selectBlock(page);
+  };
+
+  document.getElementById("empty-new-page-btn").onclick = () =>
+    document.getElementById("new-page-btn").click();
+
+  document.getElementById("empty-journal-btn").onclick = () =>
+    document.getElementById("journal-today-btn").click();
+
+  // --- selezione blocco radice ---
+
+  function hideAllViews() {
+    document.getElementById("empty-state").style.display = "none";
+    document.getElementById("page-view").style.display = "none";
+    document.getElementById("database-view").style.display = "none";
+    document.getElementById("project-view").style.display = "none";
+    document.getElementById("booster-view").style.display = "none";
+    document.getElementById("inbox-view").style.display = "none";
+    document.getElementById("review-view").style.display = "none";
+  }
+
+  async function flushCurrentEditor() {
+    if (currentBlock && (currentBlock.type === "page" || currentBlock.type === "journal_entry")) {
+      await window.LedgerEditor.flush();
+    }
+  }
+
+  async function selectBlock(block) {
+    await flushCurrentEditor();
+    currentBlock = block;
+    await refreshSidebar();
+    hideAllViews();
+    setActiveNav(block.type === "journal_entry" ? "journal-today-btn" : "");
+
+    if (block.type === "page") {
+      document.getElementById("page-view").style.display = "block";
+      await openPage(block);
+      animateIn(document.getElementById("page-view"));
+    } else if (block.type === "journal_entry") {
+      document.getElementById("page-view").style.display = "block";
+      await openJournalEntry(block);
+      animateIn(document.getElementById("page-view"));
+    } else if (block.type === "database") {
+      document.getElementById("database-view").style.display = "block";
+      await openDatabase(block);
+      animateIn(document.getElementById("database-view"));
+    } else if (block.type === "database_row") {
+      document.getElementById("project-view").style.display = "block";
+      await openProjectRow(block);
+    }
+  }
+
+  // --- pagina / editor ---
+
+  async function openPage(block) {
+    document.getElementById("journal-meta").style.display = "none";
+    const titleInput = document.getElementById("page-title-input");
+    titleInput.style.display = "block";
+    titleInput.value = (block.content && block.content.title) || "";
+    titleInput.onchange = async () => {
+      await api().update_block(block.id, { content: { title: titleInput.value } });
+      block.content = { ...(block.content || {}), title: titleInput.value };
+      await refreshSidebar();
+    };
+
+    const backDiv = document.getElementById("back-to-project");
+    backDiv.style.display = "none";
+    if (block.parent_id) {
+      const parent = await api().get_block(block.parent_id);
+      if (parent && parent.type === "database_row") {
+        backDiv.style.display = "block";
+        document.getElementById("back-to-project-btn").onclick = () => selectBlock(parent);
+      }
+    }
+
+    const exportBtn = document.getElementById("export-md-btn");
+    exportBtn.style.display = "inline-block";
+    exportBtn.onclick = async () => {
+      const originalText = exportBtn.textContent;
+      const result = await api().export_page_markdown(block.id);
+      exportBtn.textContent = result.ok ? "Esportato ✓" : "Annullato";
+      setTimeout(() => (exportBtn.textContent = originalText), 2000);
+    };
+
+    await window.LedgerEditor.init("editor-container", block.id);
+    await refreshBacklinks(block.id);
+  }
+
+  // --- journal (Fase 6bis) ---
+
+  async function openJournalEntry(block) {
+    document.getElementById("page-title-input").style.display = "none";
+    document.getElementById("journal-meta").style.display = "block";
+    document.getElementById("back-to-project").style.display = "none";
+    document.getElementById("export-md-btn").style.display = "none";
+
+    document.getElementById("journal-prompt").textContent =
+      (block.content && block.content.prompt) || "";
+
+    const moodSelect = document.getElementById("journal-mood");
+    moodSelect.value = (block.properties && block.properties.mood) || "";
+    moodSelect.onchange = async () => {
+      const properties = { ...(block.properties || {}), mood: moodSelect.value || null };
+      block.properties = properties;
+      await api().update_block(block.id, { properties });
+    };
+
+    const gratitudineInput = document.getElementById("journal-gratitudine");
+    gratitudineInput.value = ((block.properties && block.properties.gratitudine) || []).join(", ");
+    gratitudineInput.onchange = async () => {
+      const gratitudine = gratitudineInput.value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const properties = { ...(block.properties || {}), gratitudine };
+      block.properties = properties;
+      await api().update_block(block.id, { properties });
+    };
+
+    await window.LedgerEditor.init("editor-container", block.id);
+    await refreshBacklinks(block.id);
+  }
+
+  document.getElementById("journal-today-btn").onclick = async () => {
+    const entry = await api().ensure_today_journal();
+    await selectBlock(entry);
+  };
+
+  document.getElementById("reflection-weekly-btn").onclick = async () => {
+    const page = await api().ensure_reflection_page("weekly");
+    await refreshSidebar();
+    await selectBlock(page);
+  };
+
+  document.getElementById("reflection-monthly-btn").onclick = async () => {
+    const page = await api().ensure_reflection_page("monthly");
+    await refreshSidebar();
+    await selectBlock(page);
+  };
+
+  // --- backlink (Fase 6) ---
+
+  async function refreshBacklinks(blockId) {
+    const backlinks = await api().get_backlinks(blockId);
+    renderBacklinks(document.getElementById("backlinks-list"), backlinks);
+  }
+
+  async function resolveRootAndOpen(block) {
+    let current = block;
+    while (current.parent_id) {
+      const parent = await api().get_block(current.parent_id);
+      if (!parent) break;
+      current = parent;
+    }
+    await refreshSidebar();
+    await selectBlock(current);
+  }
+
+  // --- ricerca full-text (Fase 5) ---
+
+  let searchTimer = null;
+  document.getElementById("search-input").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    const query = e.target.value.trim();
+    if (!query) {
+      document.getElementById("search-results").style.display = "none";
+      return;
+    }
+    searchTimer = setTimeout(() => runSearch(query), 300);
+  });
+
+  async function runSearch(query) {
+    const results = await api().search(query);
+    const container = document.getElementById("search-results");
+    container.innerHTML = "";
+    container.style.display = "block";
+    if (results.length === 0) {
+      emptyNote(container, "Nessun risultato.");
+      return;
+    }
+    for (const r of results) {
+      const item = document.createElement("div");
+      item.className = "search-result-item";
+      const title = document.createElement("div");
+      title.className = "search-result-title";
+      title.textContent = (r.content && (r.content.title || r.content.text)) || r.type;
+      const snippet = document.createElement("div");
+      snippet.className = "search-result-snippet";
+      snippet.textContent = r.snippet || "";
+      item.appendChild(title);
+      item.appendChild(snippet);
+      item.onclick = () => resolveRootAndOpen(r);
+      container.appendChild(item);
+    }
+  }
+
+  // --- database ---
+
+  async function openDatabase(block) {
+    const titleInput = document.getElementById("db-title-input");
+    titleInput.value = (block.content && block.content.title) || "";
+    titleInput.onchange = async () => {
+      await api().update_block(block.id, { content: { title: titleInput.value } });
+      block.content = { ...(block.content || {}), title: titleInput.value };
+      await refreshSidebar();
+    };
+
+    const hasSchema = block.schema && block.schema.campi && block.schema.campi.length > 0;
+    document.getElementById("db-content").style.display = hasSchema ? "block" : "none";
+    renderSchemaEditor(block.schema);
+
+    if (hasSchema) {
+      await refreshCurrentView();
+    }
+  }
+
+  // --- progetti / system design (Fase 8) ---
+
+  async function openProjectRow(row) {
+    const parentDb = await api().get_block(row.parent_id);
+    const fields = (parentDb.schema && parentDb.schema.campi) || [];
+
+    const titleInput = document.getElementById("project-title-input");
+    titleInput.value = (row.properties && row.properties.Nome) || "";
+    titleInput.onchange = async () => {
+      const properties = { ...(row.properties || {}), Nome: titleInput.value };
+      row.properties = properties;
+      await api().update_block(row.id, { properties });
+      await refreshSidebar();
+    };
+
+    renderProjectPills(row, fields);
+
+    const wrap = document.getElementById("project-fields");
+    wrap.innerHTML = "";
+    // il nome vive nel titolo in cima: non ripeterlo tra i campi
+    for (const f of fields.filter((f) => f.nome !== "Nome")) {
+      const label = document.createElement("label");
+      label.className = "project-field";
+      const caption = document.createElement("span");
+      caption.textContent = f.nome;
+      const input = renderFieldInput(row, f);
+      if (f.tipo === "select") {
+        input.addEventListener("change", () => renderProjectPills(row, fields));
+      }
+      label.appendChild(caption);
+      label.appendChild(input);
+      wrap.appendChild(label);
+    }
+
+    const pagine = (row.properties && row.properties.pagine) || {};
+    document.querySelectorAll("#project-view .page-card").forEach((btn) => {
+      const pageId = pagine[btn.dataset.page];
+      btn.disabled = !pageId;
+      btn.onclick = async () => {
+        if (!pageId) return;
+        const page = await api().get_block(pageId);
+        await selectBlock(page);
+      };
+    });
+
+    animateIn(document.getElementById("project-view"));
+  }
+
+  // Le pillole mostrano solo i campi a scelta valorizzati: uno stato
+  // vuoto non merita spazio in testata.
+  function renderProjectPills(row, fields) {
+    const wrap = document.getElementById("project-pills");
+    wrap.innerHTML = "";
+    for (const f of fields) {
+      if (f.tipo !== "select") continue;
+      const value = row.properties ? row.properties[f.nome] : null;
+      if (!value) continue;
+      const pill = document.createElement("span");
+      pill.className = "pill";
+      pill.textContent = value;
+      wrap.appendChild(pill);
+    }
+  }
+
+  // --- knowledge booster (Fase 7) ---
+
+  document.getElementById("booster-btn").onclick = () =>
+    openSection("booster-view", "booster-btn", refreshBoosterList);
+
+  document.getElementById("add-concept-btn").onclick = async () => {
+    const input = document.getElementById("new-concept-input");
+    const argomento = input.value.trim();
+    if (!argomento) return;
+    await api().create_concept(argomento);
+    input.value = "";
+    await refreshBoosterList();
+    await refreshBadges();
+  };
+
+  async function refreshBoosterList() {
+    const due = await api().due_today_concepts();
+    const container = document.getElementById("booster-list");
+    container.innerHTML = "";
+    if (due.length === 0) {
+      emptyNote(container, "Tutto ripassato. Torna domani.");
+      return;
+    }
+    for (const concept of due) {
+      const row = document.createElement("div");
+      row.className = "card-row";
+
+      const label = document.createElement("span");
+      label.className = "card-text";
+      label.textContent = concept.properties.argomento;
+      row.appendChild(label);
+
+      const ratings = document.createElement("div");
+      ratings.className = "rating-scale";
+      for (let q = 1; q <= 5; q++) {
+        const btn = document.createElement("button");
+        btn.textContent = String(q);
+        btn.title = ["Non ricordavo", "A fatica", "Con sforzo", "Bene", "Immediato"][q - 1];
+        btn.onclick = async () => {
+          await api().review_concept(concept.id, q);
+          await refreshBoosterList();
+          await refreshBadges();
+        };
+        ratings.appendChild(btn);
+      }
+      row.appendChild(ratings);
+
+      container.appendChild(row);
+    }
+    animateIn(container);
+  }
+
+  // --- inbox / quick capture (Fase 10) ---
+
+  document.getElementById("inbox-btn").onclick = () =>
+    openSection("inbox-view", "inbox-btn", refreshInboxList);
+
+  async function refreshInboxList() {
+    const items = await api().list_inbox();
+    const container = document.getElementById("inbox-list");
+    container.innerHTML = "";
+    if (items.length === 0) {
+      emptyNote(container, "Niente da triagare.");
+      return;
+    }
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "card-row";
+
+      const label = document.createElement("span");
+      label.className = "card-text";
+      label.textContent = (item.content && item.content.text) || "";
+      row.appendChild(label);
+
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+
+      const promoteBtn = document.createElement("button");
+      promoteBtn.className = "btn-secondary";
+      promoteBtn.textContent = "Apri come pagina";
+      promoteBtn.onclick = async () => {
+        const page = await api().promote_inbox_item(item.id);
+        await refreshSidebar();
+        await refreshBadges();
+        await refreshInboxList();
+        await selectBlock(page);
+      };
+
+      const discardBtn = document.createElement("button");
+      discardBtn.className = "btn-quiet";
+      discardBtn.textContent = "Elimina";
+      discardBtn.onclick = async () => {
+        await api().discard_inbox_item(item.id);
+        await refreshBadges();
+        await refreshInboxList();
+      };
+
+      actions.appendChild(promoteBtn);
+      actions.appendChild(discardBtn);
+      row.appendChild(actions);
+
+      container.appendChild(row);
+    }
+    animateIn(container);
+  }
+
+  // --- weekly review (Fase 11) ---
+
+  document.getElementById("review-btn").onclick = () =>
+    openSection("review-view", "review-btn", refreshReviewView);
+
+  function reviewRow(container, text, meta, onClick) {
+    const item = document.createElement("button");
+    item.className = "row-link";
+    item.appendChild(document.createTextNode(text));
+    if (meta) {
+      const m = document.createElement("span");
+      m.className = "row-meta";
+      m.textContent = meta;
+      item.appendChild(m);
+    }
+    item.onclick = onClick;
+    container.appendChild(item);
+  }
+
+  async function refreshReviewView() {
+    const data = await api().get_weekly_review();
+
+    const overdueEl = document.getElementById("review-overdue");
+    overdueEl.innerHTML = "";
+    if (data.task_scaduti.length === 0) {
+      emptyNote(overdueEl, "Niente in ritardo.");
+    } else {
+      for (const row of data.task_scaduti) {
+        const nome = (row.properties && (row.properties.Nome || row.properties.nome)) || "Senza nome";
+        reviewRow(overdueEl, nome, `${row._database_titolo} · ${row._scadenza_valore}`, () =>
+          selectBlock(row)
+        );
+      }
+    }
+
+    const conceptsEl = document.getElementById("review-concepts");
+    conceptsEl.innerHTML = "";
+    if (data.concetti_da_rivedere.length === 0) {
+      emptyNote(conceptsEl, "Tutto ripassato.");
+    } else {
+      for (const c of data.concetti_da_rivedere) {
+        reviewRow(conceptsEl, c.properties.argomento, null, () =>
+          document.getElementById("booster-btn").click()
+        );
+      }
+    }
+
+    const pagesEl = document.getElementById("review-pages");
+    pagesEl.innerHTML = "";
+    if (data.pagine_modificate.length === 0) {
+      emptyNote(pagesEl, "Nessuna pagina toccata negli ultimi sette giorni.");
+    } else {
+      for (const p of data.pagine_modificate) {
+        const when = new Date(p.updated_at).toLocaleDateString("it-IT");
+        reviewRow(pagesEl, (p.content && p.content.title) || "Senza titolo", when, () =>
+          resolveRootAndOpen(p)
+        );
+      }
+    }
+
+    [overdueEl, conceptsEl, pagesEl].forEach(animateIn);
+  }
+
+  // --- backup cifrato locale (Fase 12) ---
+
+  document.getElementById("backup-btn").onclick = async () => {
+    const label = document.querySelector("#backup-btn .nav-label");
+    const result = await api().backup_now();
+    label.textContent = result.ok ? "Backup salvato" : "Backup annullato";
+    await refreshBackupMeta();
+    setTimeout(() => (label.textContent = "Backup"), 2200);
+  };
+
+  function renderSchemaEditor(schema) {
+    const fieldsWrap = document.getElementById("schema-fields");
+    fieldsWrap.innerHTML = "";
+    const fields = (schema && schema.campi) || [];
+    for (const f of fields) addSchemaFieldRow(f);
+    if (fields.length === 0) addSchemaFieldRow();
+  }
+
+  function addSchemaFieldRow(field) {
+    const fieldsWrap = document.getElementById("schema-fields");
+    const row = document.createElement("div");
+    row.className = "schema-field-row";
+
+    const nameInput = document.createElement("input");
+    nameInput.placeholder = "Nome campo";
+    nameInput.value = (field && field.nome) || "";
+
+    const typeSelect = document.createElement("select");
+    for (const t of FIELD_TYPES) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t;
+      if (field && field.tipo === t) o.selected = true;
+      typeSelect.appendChild(o);
+    }
+
+    const optionsInput = document.createElement("input");
+    optionsInput.placeholder = "Opzioni (separate da virgola)";
+    optionsInput.value = field && field.opzioni ? field.opzioni.join(",") : "";
+    optionsInput.style.display = typeSelect.value === "select" ? "inline-block" : "none";
+    typeSelect.onchange = () => {
+      optionsInput.style.display = typeSelect.value === "select" ? "inline-block" : "none";
+    };
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "schema-remove";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Rimuovi campo";
+    removeBtn.onclick = () => row.remove();
+
+    row.appendChild(nameInput);
+    row.appendChild(typeSelect);
+    row.appendChild(optionsInput);
+    row.appendChild(removeBtn);
+    fieldsWrap.appendChild(row);
+  }
+
+  document.getElementById("add-field-btn").onclick = () => addSchemaFieldRow();
+
+  document.getElementById("save-schema-btn").onclick = async () => {
+    const rows = document.querySelectorAll("#schema-fields .schema-field-row");
+    const campi = [];
+    for (const row of rows) {
+      const [nameInput, typeSelect, optionsInput] = row.querySelectorAll("input, select");
+      if (!nameInput.value.trim()) continue;
+      const field = { nome: nameInput.value.trim(), tipo: typeSelect.value };
+      if (typeSelect.value === "select") {
+        field.opzioni = optionsInput.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      campi.push(field);
+    }
+    const schema = { campi };
+    await api().update_block(currentBlock.id, { schema });
+    currentBlock.schema = schema;
+    document.getElementById("db-content").style.display = campi.length ? "block" : "none";
+    if (campi.length) await refreshCurrentView();
+  };
+
+  // --- viste database ---
+
+  document.querySelectorAll(".view-switcher button").forEach((btn) => {
+    btn.onclick = async () => {
+      document.querySelectorAll(".view-switcher button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentDbViewMode = btn.dataset.view;
+      await refreshCurrentView();
+    };
+  });
+
+  async function refreshCurrentView() {
+    if (!currentBlock || currentBlock.type !== "database") return;
+    const rows = await api().list_blocks(currentBlock.id);
+    const container = document.getElementById("db-view-container");
+    if (currentDbViewMode === "table") renderTableView(container, currentBlock, rows);
+    else if (currentDbViewMode === "board") renderBoardView(container, currentBlock, rows);
+    else renderListView(container, currentBlock, rows);
+  }
+
+  window.LedgerApp = { refreshCurrentView, selectBlock, openBacklinkTarget: resolveRootAndOpen };
+
+  window.addEventListener("pywebviewready", initUnlock);
+</script>

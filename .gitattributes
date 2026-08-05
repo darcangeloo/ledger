@@ -1,0 +1,8 @@
+# Line ending normalizzati: il repo resta LF anche se lo si sviluppa su
+# Windows, cosi' un clone su un'altra macchina non produce diff fantasma.
+* text=auto eol=lf
+
+# Binari: mai toccati.
+*.ico binary
+*.exe binary
+*.png binary

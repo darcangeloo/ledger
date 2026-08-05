@@ -1,0 +1,10 @@
+# Runtime
+pywebview==6.2.1
+cryptography==49.0.0
+keyboard==0.13.5
+
+# Build dell'eseguibile (non necessario per l'uso)
+pyinstaller==6.21.0
+
+# Solo per rigenerare frontend/ledger.ico
+# Pillow==12.2.0

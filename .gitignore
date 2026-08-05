@@ -1,0 +1,26 @@
+# --- dati personali: non devono MAI finire nel repository ---
+# Il vault e' cifrato, ma pubblicarlo regala a chiunque un bersaglio da
+# attaccare offline senza limiti di tentativi.
+*.db
+*.db.salt
+*.db.tmp
+*.backup_config.json
+*.bak
+*.sqlite
+
+# --- artefatti di build (rigenerabili: npm run build) ---
+node_modules/
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec.bak
+frontend/*.bundle.js
+
+# --- ambiente locale ---
+.venv/
+venv/
+.env
+*.log
+.vscode/
+.idea/

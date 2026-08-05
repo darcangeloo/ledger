@@ -1,0 +1,158 @@
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none';
+               script-src 'self' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data:;
+               connect-src 'none';
+               form-action 'none';
+               object-src 'none';
+               base-uri 'none'" />
+<title>Quick Capture</title>
+<style>
+  :root {
+    --paper: #FFFFFF;
+    --paper-sunk: #F7F7F4;
+    --rule: #E6E6E0;
+    --ink: #161A17;
+    --ink-faint: #9BA098;
+    --emerald: #0F5132;
+    --emerald-lift: #146B42;
+    --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "Cascadia Mono", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 14px 16px;
+    background: var(--paper-sunk);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--emerald);
+    margin: 0 0 7px;
+  }
+
+  textarea {
+    width: 100%;
+    height: 72px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 9px 10px;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    resize: none;
+    transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: var(--emerald);
+    box-shadow: 0 0 0 3px rgba(15, 81, 50, 0.06);
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 9px;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--emerald);
+    color: #fff;
+    border: 1px solid var(--emerald);
+    border-radius: 6px;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
+  }
+
+  button:hover {
+    background: var(--emerald-lift);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 3px 10px rgba(15, 81, 50, 0.18);
+  }
+
+  button:focus-visible {
+    outline: 2px solid var(--emerald);
+    outline-offset: 2px;
+  }
+
+  .hint {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+  }
+
+  .hint.error {
+    color: #8A2B2B;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 1ms !important; }
+  }
+</style>
+
+<p class="eyebrow">Cattura</p>
+<textarea id="capture-input" placeholder="Cosa non vuoi dimenticare?"></textarea>
+<div class="bar">
+  <span class="hint">Ctrl+Invio salva · Esc chiude</span>
+  <button id="save-btn">Salva</button>
+</div>
+
+<script>
+  const textarea = document.getElementById("capture-input");
+  const hint = document.querySelector(".hint");
+  const HINT_DEFAULT = hint.textContent;
+
+  // Se il salvataggio non riesce (vault ancora bloccato) la finestra resta
+  // aperta col testo dentro: chiuderla lo butterebbe via senza avviso.
+  async function save() {
+    const text = textarea.value.trim();
+    if (!text) {
+      await window.pywebview.api.close();
+      return;
+    }
+    let result;
+    try {
+      result = await window.pywebview.api.save_capture(text);
+    } catch (err) {
+      result = { ok: false, error: "Salvataggio non riuscito, il testo resta qui." };
+    }
+    if (!result || !result.ok) {
+      hint.textContent = (result && result.error) || "Salvataggio non riuscito.";
+      hint.classList.add("error");
+      textarea.focus();
+      return;
+    }
+    hint.textContent = HINT_DEFAULT;
+    hint.classList.remove("error");
+    await window.pywebview.api.close();
+  }
+
+  document.getElementById("save-btn").onclick = save;
+
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save();
+    if (e.key === "Escape") window.pywebview.api.close();
+  });
+
+  window.addEventListener("pywebviewready", () => textarea.focus());
+</script>
